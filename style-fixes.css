@@ -45,6 +45,57 @@ button {
   max-width: 100%;
 }
 
+/* Live win chance */
+.win-probability {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.win-probability-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+
+#win-probability-value {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+
+.win-probability-track {
+  height: 7px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #1e293b;
+}
+
+.win-probability-fill {
+  width: calc(var(--win-probability, 50) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+  transition: width 180ms ease;
+}
+
+.win-probability-note {
+  margin-top: 7px;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0.62;
+}
+
+.win-probability[data-level="dominant"] { color: #22c55e; }
+.win-probability[data-level="favored"] { color: #84cc16; }
+.win-probability[data-level="even"] { color: #fbbf24; }
+.win-probability[data-level="behind"] { color: #fb923c; }
+.win-probability[data-level="critical"] { color: #ef4444; }
+
 /* Avoid the desktop card dimensions making the table unusable on phones. */
 @media (max-width: 900px) {
   :root {
