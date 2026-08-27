@@ -61,6 +61,17 @@
         <button class="action-btn take-btn" id="btn-take" onclick="resolveBout('take')">Take</button>
       </div>
 
+      <section id="win-probability" class="win-probability" aria-live="polite" aria-label="Estimated chance of winning">
+        <div class="win-probability-heading">
+          <span>Win chance</span>
+          <span id="win-probability-value">50%</span>
+        </div>
+        <div class="win-probability-track" aria-hidden="true">
+          <div class="win-probability-fill"></div>
+        </div>
+        <div class="win-probability-note">Estimated from the current hand, trumps, cards known and game position.</div>
+      </section>
+
       <section class="control-section">
         <h4 class="section-title">Opponent's Hand</h4>
         <div id="quick-opp-hand" class="card-row quick-hand"></div>
@@ -82,10 +93,11 @@
     </div>
   </div>
 
-  <!-- rules.js -> engine.js -> app.js -> fixes.js -->
+  <!-- rules.js -> engine.js -> app.js -> fixes.js -> win-probability.js -->
   <script src="js/rules.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/app.js"></script>
   <script src="js/fixes.js"></script>
+  <script src="js/win-probability.js"></script>
 </body>
 </html>
