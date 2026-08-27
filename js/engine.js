@@ -1,47 +1,37 @@
 // ============================================================
-// DURAK MOVE ENGINE
+// DURAK AI / MOVE ENGINE
 // ============================================================
-// Requires existing globals:
-//   state
-//   RANK_VALUES
-//   canBeat(cardA, cardB)
+// The engine is a suggestion layer. app.js remains authoritative for
+// applying moves and resolving a bout.
 //
-// Expected state fields:
-//   state.phase
-//   state.turn
-//   state.tablePairs
-//   state.deckSize
-//   state.myHand
-//   state.oppKnownHand
-//   state.oppUnknownCount
-//   state.discard
-//   state.trumpCard
+// Important model:
+//   state.attacker = player who started the current bout
+//   state.turn     = player who must act now
+//   tablePairs    = [{ attack, defend }]
 //
-// Special UI moves:
-//   BITO = finish attack / throw in no more cards
-//   TAKE = take the table
+// A defended attack returns the turn to the attacker. The attacker may
+// add another legal throw-in or finish with BITO. The defender may defend
+// an unanswered attack or TAKE. This is the actual Durak turn structure.
 // ============================================================
 
-
-// ============================================================
-// 1. BASIC CARD HELPERS
-// ============================================================
+const DURAK_DECK_SIZE = 24;
+const DURAK_HAND_LIMIT = 6;
 
 function getCardRank(cardId) {
-  return cardId.slice(0, -1);
+  return typeof cardId === 'string' ? cardId.slice(0, -1) : '';
 }
 
 function getCardSuit(cardId) {
-  return cardId.slice(-1);
+  return typeof cardId === 'string' ? cardId.slice(-1) : '';
 }
 
 function getCardValue(cardId) {
-  return RANK_VALUES[getCardRank(cardId)];
+  return RANK_VALUES[getCardRank(cardId)] ?? 0;
 }
 
-function isTrump(cardId) {
-  if (!cardId || !state.trumpCard) return false;
-  return getCardSuit(cardId) === getCardSuit(state.trumpCard);
+function isTrump(cardId, s = state) {
+  return !!cardId && !!s.trumpCard &&
+    getCardSuit(cardId) === getCardSuit(s.trumpCard);
 }
 
 function isHighCard(cardId) {
@@ -49,7 +39,7 @@ function isHighCard(cardId) {
 }
 
 function isLowCard(cardId) {
-  return getCardValue(cardId) <= 8;
+  return getCardValue(cardId) <= 10;
 }
 
 function cloneState(s) {
@@ -58,28 +48,16 @@ function cloneState(s) {
     myHand: [...s.myHand],
     oppKnownHand: [...s.oppKnownHand],
     discard: [...s.discard],
-    tablePairs: s.tablePairs.map(p => ({
-      attack: p.attack,
-      defend: p.defend
-    }))
+    tablePairs: s.tablePairs.map(p => ({ attack: p.attack, defend: p.defend }))
   };
 }
 
-
-// ============================================================
-// 2. TABLE / HAND HELPERS
-// ============================================================
-
 function getTableCards(s = state) {
-  return s.tablePairs.flatMap(p =>
-    [p.attack, p.defend].filter(Boolean)
-  );
+  return s.tablePairs.flatMap(p => [p.attack, p.defend].filter(Boolean));
 }
 
 function getTableRanks(s = state) {
-  return new Set(
-    getTableCards(s).map(getCardRank)
-  );
+  return new Set(getTableCards(s).map(getCardRank));
 }
 
 function getTableCardCount(s = state) {
@@ -87,959 +65,403 @@ function getTableCardCount(s = state) {
 }
 
 function getLastPair(s = state) {
-  return s.tablePairs[s.tablePairs.length - 1];
+  return s.tablePairs[s.tablePairs.length - 1] || null;
 }
 
 function needsDefense(s = state) {
-  const lastPair = getLastPair(s);
-  return !!(lastPair && !lastPair.defend);
+  const pair = getLastPair(s);
+  return !!pair && !pair.defend;
 }
 
 function getMyRankCounts(s = state) {
-  const counts = {};
-
-  for (const card of s.myHand) {
+  return s.myHand.reduce((out, card) => {
     const rank = getCardRank(card);
-    counts[rank] = (counts[rank] || 0) + 1;
-  }
-
-  return counts;
+    out[rank] = (out[rank] || 0) + 1;
+    return out;
+  }, {});
 }
 
 function getOppKnownRankCounts(s = state) {
-  const counts = {};
-
-  for (const card of s.oppKnownHand) {
+  return s.oppKnownHand.reduce((out, card) => {
     const rank = getCardRank(card);
-    counts[rank] = (counts[rank] || 0) + 1;
-  }
-
-  return counts;
-}
-
-
-// ============================================================
-// 3. DECK / UNKNOWN CARD INFORMATION
-// ============================================================
-
-function getRemainingDeck(s = state) {
-  const tableCount = getTableCardCount(s);
-
-  return Math.max(
-    0,
-    s.deckSize -
-      (
-        s.myHand.length +
-        s.oppKnownHand.length +
-        s.oppUnknownCount +
-        s.discard.length +
-        tableCount
-      )
-  );
-}
-
-function isExactEndgame(s = state) {
-  return (
-    getRemainingDeck(s) <= 0 &&
-    s.oppUnknownCount === 0
-  );
+    out[rank] = (out[rank] || 0) + 1;
+    return out;
+  }, {});
 }
 
 function getOpponentTotalCards(s = state) {
   return s.oppKnownHand.length + s.oppUnknownCount;
 }
 
-function getKnownRemainingCards(s = state) {
-  return (
-    s.myHand.length +
-    s.oppKnownHand.length +
-    s.oppUnknownCount +
-    getRemainingDeck(s)
-  );
+function getRemainingDeck(s = state) {
+  const knownUsed = new Set([
+    ...s.myHand,
+    ...s.oppKnownHand,
+    ...s.discard,
+    ...getTableCards(s),
+    ...(s.trumpCard ? [s.trumpCard] : [])
+  ]).size;
+
+  return Math.max(0, DURAK_DECK_SIZE - knownUsed - s.oppUnknownCount);
 }
 
-
-// ============================================================
-// 4. TRUMP ECONOMY
-// ============================================================
+function isExactEndgame(s = state) {
+  return getRemainingDeck(s) === 0 && s.oppUnknownCount === 0;
+}
 
 function getMyTrumpCount(s = state) {
-  return s.myHand.filter(c => isTrump(c)).length;
+  return s.myHand.filter(c => isTrump(c, s)).length;
 }
 
 function getKnownOpponentTrumpCount(s = state) {
-  return s.oppKnownHand.filter(c => isTrump(c)).length;
+  return s.oppKnownHand.filter(c => isTrump(c, s)).length;
 }
 
 function getEstimatedUnknownTrumpCount(s = state) {
-  // Estimate how many unknown trumps remain.
-  //
-  // There are 8 trump cards in a standard 36-card Durak deck.
-  // If your game uses another deck size, this still gives a
-  // reasonable estimate based on the standard Durak structure.
-  const totalTrumps = 8;
-
-  const knownTrumps =
-    getMyTrumpCount(s) +
-    getKnownOpponentTrumpCount(s) +
-    getTableCards(s).filter(c => isTrump(c)).length +
-    s.discard.filter(c => isTrump(c)).length;
-
-  return Math.max(0, totalTrumps - knownTrumps);
+  if (!s.trumpCard) return 0;
+  const suit = getCardSuit(s.trumpCard);
+  const total = s.allCards.filter(c => c.suit === suit).length;
+  const known = [
+    ...s.myHand,
+    ...s.oppKnownHand,
+    ...getTableCards(s),
+    ...s.discard
+  ].filter(c => getCardSuit(c) === suit).length;
+  return Math.max(0, total - known);
 }
 
 function getTrumpScarcityMultiplier(s = state) {
   const remaining = getEstimatedUnknownTrumpCount(s);
-
   if (remaining <= 1) return 1.35;
   if (remaining <= 2) return 1.20;
   if (remaining <= 3) return 1.10;
-
-  return 1.0;
+  return 1;
 }
 
-
 // ============================================================
-// 5. CARD STRATEGIC VALUE
-// ============================================================
-// Higher value = more painful to lose / more useful to keep.
-//
-// This is deliberately different from card rank.
-//
-// A 10 may be more strategically valuable than a K if it is
-// your only card of that rank and helps preserve future attacks.
+// CARD / POSITION VALUE
 // ============================================================
 
 function cardStrategicValue(card, s = state) {
   const rank = getCardRank(card);
   const value = getCardValue(card);
-
   const myCounts = getMyRankCounts(s);
   const oppCounts = getOppKnownRankCounts(s);
-
   let score = value;
 
-  // ----------------------------------------------------------
-  // Trump cards are strategically valuable.
-  // ----------------------------------------------------------
-
-  if (isTrump(card)) {
-    score += 12;
-
-    // High trumps are especially valuable.
-    if (value >= 12) score += 7;
+  if (isTrump(card, s)) {
+    score += 10;
+    if (value >= 12) score += 6;
     if (value >= 14) score += 5;
-
     score *= getTrumpScarcityMultiplier(s);
   }
 
-  // ----------------------------------------------------------
-  // Duplicate ranks are useful for attacking.
-  // ----------------------------------------------------------
+  // Duplicates are expendable because they preserve attack options.
+  if (myCounts[rank] >= 2) score -= 7;
+  if (myCounts[rank] >= 3) score -= 5;
 
-  if (myCounts[rank] >= 2) {
-    score -= 7;
-  }
+  // Known opponent copies make this rank useful for throw-ins, so avoid
+  // treating the card as completely disposable.
+  if (oppCounts[rank]) score -= Math.min(6, oppCounts[rank] * 2);
 
-  if (myCounts[rank] >= 3) {
-    score -= 5;
-  }
-
-  // ----------------------------------------------------------
-  // A rank known to exist in opponent's hand is useful for
-  // future attacks because it may create a throw-in.
-  // ----------------------------------------------------------
-
-  if (oppCounts[rank]) {
-    score -= 3 * oppCounts[rank];
-  }
-
-  // ----------------------------------------------------------
-  // High non-trumps are generally liabilities.
-  // ----------------------------------------------------------
-
-  if (!isTrump(card) && value >= 12) {
-    score -= 3;
-  }
-
-  // ----------------------------------------------------------
-  // Low cards are good to get rid of.
-  // ----------------------------------------------------------
-
-  if (!isTrump(card) && value <= 8) {
-    score -= 4;
-  }
+  if (!isTrump(card, s) && value >= 13) score -= 3;
+  if (!isTrump(card, s) && value <= 10) score -= 4;
 
   return score;
 }
 
-
-// ============================================================
-// 6. ATTACK POTENTIAL
-// ============================================================
-
 function getRankAttackPotential(rank, s = state) {
-  const myCount = s.myHand.filter(
-    c => getCardRank(c) === rank
-  ).length;
-
-  const oppCount = s.oppKnownHand.filter(
-    c => getCardRank(c) === rank
-  ).length;
-
-  let score = myCount * 10;
-
-  if (myCount >= 2) score += 8;
-  if (myCount >= 3) score += 10;
-
-  // Known opponent copies mean this rank is likely to become
-  // available as a legal throw-in later.
-  score += oppCount * 4;
-
+  const mine = s.myHand.filter(c => getCardRank(c) === rank).length;
+  const opp = s.oppKnownHand.filter(c => getCardRank(c) === rank).length;
+  let score = mine * 10;
+  if (mine >= 2) score += 10;
+  if (mine >= 3) score += 10;
+  score += opp * 4;
   return score;
 }
 
 function getAttackPotential(card, s = state) {
-  const rank = getCardRank(card);
-
-  let score = getRankAttackPotential(rank, s);
-
-  // Prefer low cards when all else is equal.
-  score += (15 - getCardValue(card));
-
-  // Trump attacks are powerful but expensive.
-  if (isTrump(card)) {
-    score -= 8;
-  }
-
+  let score = getRankAttackPotential(getCardRank(card), s);
+  score += 16 - getCardValue(card);
+  if (isTrump(card, s)) score -= 10;
   return score;
-}
-
-
-// ============================================================
-// 7. HOW SAFE IS AN ATTACK?
-// ============================================================
-
-function opponentCanBeatKnown(card, s = state) {
-  return s.oppKnownHand.some(
-    oppCard => canBeat(card, oppCard)
-  );
 }
 
 function countKnownAnswers(card, s = state) {
-  return s.oppKnownHand.filter(
-    oppCard => canBeat(card, oppCard)
-  ).length;
+  return s.oppKnownHand.filter(c => canBeat(card, c)).length;
+}
+
+function opponentCanBeatKnown(card, s = state) {
+  return countKnownAnswers(card, s) > 0;
 }
 
 function attackSafety(card, s = state) {
-  let score = 0;
-
   const answers = countKnownAnswers(card, s);
-
-  // No known answer is good.
-  if (answers === 0) {
-    score += 12;
-  } else {
-    score -= answers * 5;
-  }
-
-  // High cards are harder to recover from.
-  if (getCardValue(card) >= 13) {
-    score -= 3;
-  }
-
-  // Trump attack is expensive.
-  if (isTrump(card)) {
-    score -= 7;
-  }
-
+  let score = answers === 0 ? 15 : -answers * 6;
+  if (getCardValue(card) >= 13) score -= 3;
+  if (isTrump(card, s)) score -= 8;
   return score;
-}
-
-
-// ============================================================
-// 8. PILE VALUE
-// ============================================================
-
-function getPileStrategicValue(s = state) {
-  return getTableCards(s).reduce(
-    (total, card) => total + cardStrategicValue(card, s),
-    0
-  );
 }
 
 function getPileRisk(s = state) {
   const cards = getTableCards(s);
-
   if (!cards.length) return 0;
-
-  let score = 0;
-
+  let risk = 0;
   for (const card of cards) {
-    score += getCardValue(card);
-
-    if (isTrump(card)) {
-      score += 8;
-    }
-
-    if (getCardValue(card) >= 12) {
-      score += 5;
-    }
+    risk += getCardValue(card);
+    if (isTrump(card, s)) risk += 8;
+    if (getCardValue(card) >= 12) risk += 5;
   }
-
-  // Larger piles become increasingly dangerous.
-  score += Math.max(0, cards.length - 2) * 5;
-
-  return score;
+  return risk + Math.max(0, cards.length - 2) * 5;
 }
 
-
-// ============================================================
-// 9. INITIATIVE / TEMPO
-// ============================================================
-// This is intentionally approximate because the actual turn
-// transition is controlled elsewhere by the application.
-//
-// Positive = position tends to favor us.
-// ============================================================
-
-function estimateInitiative(s = state) {
-  const myCards = s.myHand.length;
-  const oppCards = getOpponentTotalCards(s);
-
-  let score = 0;
-
-  // Having fewer cards is generally good.
-  score += (oppCards - myCards) * 8;
-
-  // If opponent is down to very few cards, avoiding giving
-  // them initiative becomes much more important.
-  if (oppCards <= 2) {
-    score += (myCards - oppCards) * 12;
-  }
-
-  // If we are down to very few cards, aggressively getting
-  // rid of cards becomes more valuable.
-  if (myCards <= 2) {
-    score += (oppCards - myCards) * 15;
-  }
-
-  return score;
-}
-
-
-// ============================================================
-// 10. OPPONENT PRESSURE
-// ============================================================
-
-function opponentPressure(s = state) {
-  const oppCards = getOpponentTotalCards(s);
-
-  if (oppCards <= 1) return 50;
-  if (oppCards === 2) return 35;
-  if (oppCards === 3) return 20;
-  if (oppCards === 4) return 10;
-
-  return 0;
-}
-
-
-// ============================================================
-// 11. STATE EVALUATION
-// ============================================================
-// Positive = good for us.
-// Negative = good for opponent.
-//
-// This is the core strategic evaluator used by the search.
-// ============================================================
-
+// Positive means good for us.
 function evaluateState(s, perspective = 'me') {
-  const myCards = s.myHand.length;
-  const oppCards = getOpponentTotalCards(s);
+  const my = s.myHand.length;
+  const opp = getOpponentTotalCards(s);
 
-  // ----------------------------------------------------------
-  // Terminal states
-  // ----------------------------------------------------------
+  if (my === 0 && opp === 0) return 0;
+  if (my === 0) return perspective === 'me' ? 100000 : -100000;
+  if (opp === 0) return perspective === 'me' ? -100000 : 100000;
 
-  if (myCards === 0 && oppCards === 0) {
-    return 0;
+  let score = (opp - my) * 100;
+
+  // A one-card opponent is an immediate threat. A one-card own hand is
+  // valuable, but only if we can actually finish the bout.
+  if (opp === 1) score -= 280;
+  else if (opp === 2) score -= 120;
+  if (my === 1) score += 220;
+  else if (my === 2) score += 100;
+
+  const myBurden = s.myHand.reduce((n, c) => n + cardStrategicValue(c, s), 0);
+  const oppBurden = s.oppKnownHand.reduce((n, c) => n + cardStrategicValue(c, s), 0);
+  score -= myBurden * 1.8;
+  score += oppBurden * 1.4;
+
+  score += (getMyTrumpCount(s) - getKnownOpponentTrumpCount(s)) * 8;
+
+  const myHighTrumps = s.myHand.filter(c => isTrump(c, s) && getCardValue(c) >= 12).length;
+  const oppHighTrumps = s.oppKnownHand.filter(c => isTrump(c, s) && getCardValue(c) >= 12).length;
+  score += (myHighTrumps - oppHighTrumps) * 10;
+
+  const ranks = getMyRankCounts(s);
+  for (const rank in ranks) {
+    if (ranks[rank] >= 2) score += 10;
+    if (ranks[rank] >= 3) score += 12;
   }
 
-  if (myCards === 0) {
-    return 100000;
-  }
-
-  if (oppCards === 0) {
-    return -100000;
-  }
-
-  let score = 0;
-
-  // ----------------------------------------------------------
-  // Hand-size advantage
-  // ----------------------------------------------------------
-
-  score += (oppCards - myCards) * 120;
-
-  // ----------------------------------------------------------
-  // Strongly punish allowing opponent to reach 1-2 cards.
-  // ----------------------------------------------------------
-
-  if (oppCards === 1) {
-    score -= 250;
-  } else if (oppCards === 2) {
-    score -= 120;
-  }
-
-  // ----------------------------------------------------------
-  // Reward being close to empty.
-  // ----------------------------------------------------------
-
-  if (myCards === 1) {
-    score += 250;
-  } else if (myCards === 2) {
-    score += 120;
-  }
-
-  // ----------------------------------------------------------
-  // Card-quality burden.
-  // ----------------------------------------------------------
-
-  const myCardBurden = s.myHand.reduce(
-    (total, card) => total + cardStrategicValue(card, s),
-    0
-  );
-
-  const oppKnownBurden = s.oppKnownHand.reduce(
-    (total, card) => total + cardStrategicValue(card, s),
-    0
-  );
-
-  score -= myCardBurden * 2;
-  score += oppKnownBurden * 1.5;
-
-  // Unknown opponent cards receive an average estimated
-  // burden. We cannot know what they are, so don't overvalue it.
-  score += s.oppUnknownCount * 2;
-
-  // ----------------------------------------------------------
-  // Trump economy
-  // ----------------------------------------------------------
-
-  const myTrumps = getMyTrumpCount(s);
-  const oppTrumps = getKnownOpponentTrumpCount(s);
-
-  score += (myTrumps - oppTrumps) * 8;
-
-  // High trump advantage.
-  const myHighTrumps = s.myHand.filter(
-    c => isTrump(c) && getCardValue(c) >= 12
-  ).length;
-
-  const oppHighTrumps = s.oppKnownHand.filter(
-    c => isTrump(c) && getCardValue(c) >= 12
-  ).length;
-
-  score += (myHighTrumps - oppHighTrumps) * 12;
-
-  // ----------------------------------------------------------
-  // Duplicate rank / attack potential
-  // ----------------------------------------------------------
-
-  const myRanks = getMyRankCounts(s);
-
-  for (const rank in myRanks) {
-    if (myRanks[rank] >= 2) {
-      score += 10;
-    }
-
-    if (myRanks[rank] >= 3) {
-      score += 12;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Initiative
-  // ----------------------------------------------------------
-
-  score += estimateInitiative(s) * 1.5;
-
-  // ----------------------------------------------------------
-  // Dangerous pile
-  // ----------------------------------------------------------
-
-  if (s.tablePairs.length > 0) {
-    score -= getPileRisk(s) * 0.5;
-  }
-
-  // ----------------------------------------------------------
-  // Opponent pressure
-  // ----------------------------------------------------------
-
-  score -= opponentPressure(s);
-
-  // ----------------------------------------------------------
-  // Perspective
-  // ----------------------------------------------------------
+  if (needsDefense(s)) score -= getPileRisk(s) * 0.35;
 
   return perspective === 'me' ? score : -score;
 }
 
-
-// ============================================================
-// 12. SORT HAND
-// ============================================================
-
 function getSortedHand(s = state) {
   return [...s.myHand].sort((a, b) => {
-    const strategicA = cardStrategicValue(a, s);
-    const strategicB = cardStrategicValue(b, s);
-
-    if (strategicA !== strategicB) {
-      return strategicA - strategicB;
-    }
-
-    return getCardValue(a) - getCardValue(b);
+    const diff = cardStrategicValue(a, s) - cardStrategicValue(b, s);
+    return diff || getCardValue(a) - getCardValue(b);
   });
 }
 
-
 // ============================================================
-// 13. LEGAL ATTACKS
+// LEGAL MOVES
 // ============================================================
 
-function getLegalAttacks(s = state) {
-  if (s.myHand.length === 0) {
-    return [];
-  }
-
-  // First attack of a round.
-  if (s.tablePairs.length === 0) {
-    return [...s.myHand];
-  }
-
-  const tableRanks = getTableRanks(s);
-
-  return s.myHand.filter(
-    card => tableRanks.has(getCardRank(card))
-  );
+function getAttackLimit(s = state) {
+  const defenderCount = s.turn === 'me'
+    ? getOpponentTotalCards(s)
+    : s.myHand.length;
+  const defended = s.tablePairs.filter(p => p.defend).length;
+  return Math.min(DURAK_HAND_LIMIT, defenderCount + defended);
 }
 
+function getLegalAttacks(s = state) {
+  if (!s.myHand.length) return [];
+  if (s.tablePairs.length >= getAttackLimit(s)) return [];
 
-// ============================================================
-// 14. LEGAL DEFENSES
-// ============================================================
+  if (!s.tablePairs.length) return [...s.myHand];
+  const ranks = getTableRanks(s);
+  return s.myHand.filter(card => ranks.has(getCardRank(card)));
+}
 
 function getLegalDefenses(s = state) {
   const pair = getLastPair(s);
+  if (!pair || pair.defend) return [];
+  return s.myHand.filter(card => canBeat(pair.attack, card));
+}
 
-  if (!pair || pair.defend) {
-    return [];
+function getLegalMovesForPlayer(s, player) {
+  const hand = player === 'me' ? s.myHand : s.oppKnownHand;
+  if (!hand.length) return [];
+
+  if (needsDefense(s)) {
+    return hand.filter(card => canBeat(getLastPair(s).attack, card));
   }
 
-  return s.myHand.filter(
-    card => canBeat(pair.attack, card)
-  );
+  if (!s.tablePairs.length) return [...hand];
+  const ranks = getTableRanks(s);
+  return hand.filter(card => ranks.has(getCardRank(card)));
 }
 
-
 // ============================================================
-// 15. SIMULATE ATTACK
+// SIMULATION
 // ============================================================
 
-function simulateAttack(s, card) {
-  const next = cloneState(s);
-
-  next.tablePairs.push({
-    attack: card,
-    defend: null
-  });
-
-  next.myHand = next.myHand.filter(
-    c => c !== card
-  );
-
-  return next;
+function removeCardFromHand(s, player, card) {
+  const key = player === 'me' ? 'myHand' : 'oppKnownHand';
+  const index = s[key].indexOf(card);
+  if (index >= 0) s[key].splice(index, 1);
 }
 
-
-// ============================================================
-// 16. SIMULATE DEFENSE
-// ============================================================
-
-function simulateDefense(s, card) {
+function simulatePlay(s, player, card) {
   const next = cloneState(s);
+  removeCardFromHand(next, player, card);
 
-  const index = next.tablePairs.length - 1;
-
-  if (index >= 0) {
-    next.tablePairs[index].defend = card;
-  }
-
-  next.myHand = next.myHand.filter(
-    c => c !== card
-  );
-
-  return next;
-}
-
-
-// ============================================================
-// 17. SIMULATE TAKE
-// ============================================================
-
-function simulateTake(s, isMyTurn = true) {
-  const next = cloneState(s);
-
-  const tableCards = getTableCards(next);
-
-  if (isMyTurn) {
-    next.myHand.push(...tableCards);
+  if (needsDefense(next)) {
+    next.tablePairs[next.tablePairs.length - 1].defend = card;
+    next.turn = next.attacker;
   } else {
-    next.oppKnownHand.push(...tableCards);
+    next.tablePairs.push({ attack: card, defend: null });
+    next.turn = player === 'me' ? 'opp' : 'me';
   }
-
-  next.tablePairs = [];
 
   return next;
 }
 
-
-// ============================================================
-// 18. SIMULATE BITO
-// ============================================================
-
-function simulateBito(s) {
+function simulateTake(s, player) {
   const next = cloneState(s);
-
+  const cards = getTableCards(next);
+  if (player === 'me') next.myHand.push(...cards);
+  else next.oppKnownHand.push(...cards);
   next.tablePairs = [];
-
+  next.turn = player === 'me' ? 'opp' : 'me';
+  next.attacker = player === 'me' ? 'opp' : 'me';
   return next;
 }
 
-
-// ============================================================
-// 19. DEFENSE EVALUATION
-// ============================================================
-
-function evaluateDefense(card, s = state) {
-  const pair = getLastPair(s);
-
-  if (!pair) return -Infinity;
-
-  let score = 0;
-
-  const attack = pair.attack;
-
-  // ----------------------------------------------------------
-  // Basic cost of spending the card.
-  // ----------------------------------------------------------
-
-  score -= cardStrategicValue(card, s) * 3;
-
-  // ----------------------------------------------------------
-  // Strong preference for preserving trump.
-  // ----------------------------------------------------------
-
-  if (isTrump(card)) {
-    score -= 18;
-
-    if (getCardValue(card) >= 12) {
-      score -= 15;
-    }
-
-    if (getTrumpScarcityMultiplier(s) > 1.1) {
-      score -= 10;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Don't destroy a pair unnecessarily.
-  // ----------------------------------------------------------
-
-  const rank = getCardRank(card);
-  const rankCount = s.myHand.filter(
-    c => getCardRank(c) === rank
-  ).length;
-
-  if (rankCount >= 2) {
-    score -= 12;
-  }
-
-  if (rankCount >= 3) {
-    score -= 8;
-  }
-
-  // ----------------------------------------------------------
-  // Preserve high cards only when they have strategic value.
-  // ----------------------------------------------------------
-
-  if (getCardValue(card) >= 13 && !isTrump(card)) {
-    score -= 5;
-  }
-
-  // ----------------------------------------------------------
-  // Low-card defense is usually ideal.
-  // ----------------------------------------------------------
-
-  if (isLowCard(card)) {
-    score += 8;
-  }
-
-  // ----------------------------------------------------------
-  // If opponent is close to empty, surviving efficiently
-  // becomes more important.
-  // ----------------------------------------------------------
-
-  const oppCards = getOpponentTotalCards(s);
-
-  if (oppCards <= 2) {
-    score += 15;
-  }
-
-  // ----------------------------------------------------------
-  // Consider resulting state.
-  // ----------------------------------------------------------
-
-  const next = simulateDefense(s, card);
-
-  score += evaluateState(next) * 0.15;
-
-  // ----------------------------------------------------------
-  // If we defend with a non-trump against a non-trump,
-  // that's generally preferable.
-  // ----------------------------------------------------------
-
-  if (!isTrump(attack) && !isTrump(card)) {
-    score += 10;
-  }
-
-  return score;
+function simulateBito(s, player) {
+  const next = cloneState(s);
+  next.discard.push(...getTableCards(next));
+  next.tablePairs = [];
+  next.attacker = player === 'me' ? 'opp' : 'me';
+  next.turn = next.attacker;
+  return next;
 }
 
-
 // ============================================================
-// 20. ATTACK EVALUATION
+// HEURISTIC DECISIONS
 // ============================================================
 
 function evaluateAttack(card, s = state) {
   let score = 0;
-
   const rank = getCardRank(card);
   const value = getCardValue(card);
-
-  const rankCounts = getMyRankCounts(s);
-
-  // ----------------------------------------------------------
-  // Getting rid of low cards is good.
-  // ----------------------------------------------------------
-
-  score += (16 - value) * 4;
-
-  // ----------------------------------------------------------
-  // Duplicate ranks are very useful.
-  // ----------------------------------------------------------
-
-  if (rankCounts[rank] >= 2) {
-    score += 35;
-  }
-
-  if (rankCounts[rank] >= 3) {
-    score += 20;
-  }
-
-  // ----------------------------------------------------------
-  // Attack potential.
-  // ----------------------------------------------------------
-
-  score += getAttackPotential(card, s) * 2;
-
-  // ----------------------------------------------------------
-  // Don't waste trump without a reason.
-  // ----------------------------------------------------------
-
-  if (isTrump(card)) {
-    score -= 30;
-
-    if (s.myHand.length <= 3) {
-      score += 15;
-    }
-  }
-
-  // ----------------------------------------------------------
-  // Known opponent response.
-  // ----------------------------------------------------------
-
+  const counts = getMyRankCounts(s);
   const answers = countKnownAnswers(card, s);
 
-  if (answers === 0) {
-    score += 25;
-  } else {
-    score -= answers * 8;
+  // Dumping cheap cards is usually good, but duplicate rank attacks are
+  // even more valuable because they retain future legal throw-ins.
+  score += (16 - value) * 4;
+  if (counts[rank] >= 2) score += 32;
+  if (counts[rank] >= 3) score += 20;
+  score += getAttackPotential(card, s) * 1.7;
+  score += attackSafety(card, s) * 2;
+
+  if (isTrump(card, s)) score -= 28;
+
+  // Do not blindly attack a known answer. When the opponent has a short
+  // hand, however, pressure becomes more important.
+  if (answers > 0) score -= answers * 7;
+  if (getOpponentTotalCards(s) <= 2) score += 18;
+
+  // Throwing a high singleton early can be good bait, but only if it is
+  // currently safe and we have no duplicate of its rank.
+  if (!isTrump(card, s) && value >= 13 && counts[rank] === 1 && answers === 0) {
+    score += 12;
   }
 
-  // ----------------------------------------------------------
-  // High non-trump baiting.
-  //
-  // Only worthwhile when:
-  // - the card is high
-  // - we have no duplicate
-  // - opponent's known hand doesn't punish it
-  // ----------------------------------------------------------
-
-  if (
-    s.tablePairs.length === 0 &&
-    !isTrump(card) &&
-    value >= 13 &&
-    rankCounts[rank] === 1 &&
-    answers === 0
-  ) {
-    score += 15;
-  }
-
-  // ----------------------------------------------------------
-  // If opponent has very few cards, pressure them hard.
-  // ----------------------------------------------------------
-
-  const oppCards = getOpponentTotalCards(s);
-
-  if (oppCards <= 2) {
-    score += value >= 12 ? 18 : 10;
-  }
-
-  // ----------------------------------------------------------
-  // Resulting state evaluation.
-  // ----------------------------------------------------------
-
-  const next = simulateAttack(s, card);
-
-  score += evaluateState(next) * 0.15;
-
+  const next = simulatePlay(s, 'me', card);
+  score += evaluateState(next) * 0.12;
   return score;
 }
 
-
-// ============================================================
-// 21. CHOOSE BEST ATTACK
-// ============================================================
-
 function chooseBestAttack(s = state) {
   const attacks = getLegalAttacks(s);
-
-  if (!attacks.length) {
-    return null;
-  }
-
-  let bestCard = attacks[0];
+  if (!attacks.length) return null;
+  let best = attacks[0];
   let bestScore = -Infinity;
-
   for (const card of attacks) {
     const score = evaluateAttack(card, s);
-
     if (score > bestScore) {
       bestScore = score;
-      bestCard = card;
+      best = card;
     }
   }
-
-  return {
-    card: bestCard,
-    score: bestScore
-  };
+  return { card: best, score: bestScore };
 }
 
+function evaluateDefense(card, s = state) {
+  const pair = getLastPair(s);
+  if (!pair) return -Infinity;
 
-// ============================================================
-// 22. CHOOSE BEST DEFENSE
-// ============================================================
+  let score = -cardStrategicValue(card, s) * 2.5;
+  const rank = getCardRank(card);
+  const count = getMyRankCounts(s)[rank] || 0;
+
+  // Prefer the weakest legal card that works.
+  if (isLowCard(card)) score += 10;
+  if (count >= 2) score -= 10;
+  if (count >= 3) score -= 7;
+
+  if (isTrump(card, s)) {
+    score -= 18;
+    if (getCardValue(card) >= 12) score -= 12;
+  }
+
+  if (!isTrump(pair.attack, s) && !isTrump(card, s)) score += 8;
+
+  // Against a nearly empty opponent, conserving the ability to continue
+  // attacking matters more than making a pretty defense.
+  if (getOpponentTotalCards(s) <= 2) score += 10;
+
+  score += evaluateState(simulatePlay(s, 'me', card)) * 0.12;
+  return score;
+}
 
 function chooseBestDefense(s = state) {
   const defenses = getLegalDefenses(s);
-
-  if (!defenses.length) {
-    return null;
-  }
-
-  let bestCard = defenses[0];
+  if (!defenses.length) return null;
+  let best = defenses[0];
   let bestScore = -Infinity;
-
   for (const card of defenses) {
     const score = evaluateDefense(card, s);
-
     if (score > bestScore) {
       bestScore = score;
-      bestCard = card;
+      best = card;
     }
   }
-
-  return {
-    card: bestCard,
-    score: bestScore
-  };
+  return { card: best, score: bestScore };
 }
 
-
-// ============================================================
-// 23. TAKE VS DEFEND
-// ============================================================
-// Important:
-// Taking is not automatically bad.
-//
-// We compare:
-//   A) taking the pile
-//   B) defending with the best available card
-//
-// The pile's actual strategic value is considered.
-// ============================================================
-
 function evaluateTake(s = state) {
-  const next = simulateTake(s, true);
-
-  let score = evaluateState(next);
-
-  const pileRisk = getPileRisk(s);
-
-  // Taking a dangerous pile is heavily punished.
-  score -= pileRisk * 2;
-
-  // However, taking a tiny pile of worthless cards is not
-  // nearly as bad.
-  if (getTableCardCount(s) <= 2) {
-    score += 20;
-  }
-
-  // If opponent has very few cards, taking becomes dangerous.
-  const oppCards = getOpponentTotalCards(s);
-
-  if (oppCards <= 2) {
-    score -= 100;
-  }
-
+  const pile = getTableCards(s);
+  if (!pile.length) return -Infinity;
+  let score = evaluateState(simulateTake(s, 'me'));
+  score -= getPileRisk(s) * 2.0;
+  score -= pile.length * 8;
+  if (getOpponentTotalCards(s) <= 2) score -= 100;
   return score;
 }
 
 function evaluateBestDefenseVsTake(s = state) {
   const defenses = getLegalDefenses(s);
-
   if (!defenses.length) {
-    return {
-      action: 'TAKE',
-      card: null,
-      score: evaluateTake(s)
-    };
+    return { action: 'TAKE', card: null, score: evaluateTake(s) };
   }
 
-  let bestDefense = null;
+  let bestDefense = defenses[0];
   let bestDefenseScore = -Infinity;
-
   for (const card of defenses) {
-    const next = simulateDefense(s, card);
-
-    let score = evaluateState(next);
-
-    score += evaluateDefense(card, s);
-
+    const score = evaluateDefense(card, s);
     if (score > bestDefenseScore) {
       bestDefenseScore = score;
       bestDefense = card;
@@ -1047,606 +469,235 @@ function evaluateBestDefenseVsTake(s = state) {
   }
 
   const takeScore = evaluateTake(s);
-
-  if (takeScore > bestDefenseScore) {
-    return {
-      action: 'TAKE',
-      card: null,
-      score: takeScore
-    };
-  }
-
-  return {
-    action: 'DEFEND',
-    card: bestDefense,
-    score: bestDefenseScore
-  };
+  return takeScore > bestDefenseScore
+    ? { action: 'TAKE', card: null, score: takeScore }
+    : { action: 'DEFEND', card: bestDefense, score: bestDefenseScore };
 }
 
-
 // ============================================================
-// 24. ENDGAME LEGAL MOVES
+// EXACT ENDGAME SOLVER
+// ============================================================
+// This replaces the old alternating-move minimax. In Durak, the attacker
+// gets the turn back after every successful defense, so simply alternating
+// players after every card produces illegal strategic lines.
 // ============================================================
 
-function getEndgameMoves(s, isMyTurn) {
-  const pair = getLastPair(s);
-  const defending = pair && !pair.defend;
-
-  const hand = isMyTurn
-    ? s.myHand
-    : s.oppKnownHand;
-
-  if (defending) {
-    const moves = hand.filter(
-      card => canBeat(pair.attack, card)
-    );
-
-    moves.push('TAKE');
-
-    return moves;
-  }
-
-  if (s.tablePairs.length === 0) {
-    return [...hand];
-  }
-
-  const ranks = getTableRanks(s);
-
-  const moves = hand.filter(
-    card => ranks.has(getCardRank(card))
-  );
-
-  // Bito is only meaningful once there is already a table.
-  moves.push('BITO');
-
-  return moves;
+function terminalScore(s, depth) {
+  const my = s.myHand.length;
+  const opp = s.oppKnownHand.length;
+  if (my === 0 && opp === 0) return 0;
+  if (my === 0) return 100000 - depth;
+  if (opp === 0) return -100000 + depth;
+  return null;
 }
 
+function solveEndgame(s, player, depth = 0, alpha = -Infinity, beta = Infinity, memo = new Map()) {
+  const terminal = terminalScore(s, depth);
+  if (terminal !== null) return terminal;
 
-// ============================================================
-// 25. APPLY ENDGAME MOVE
-// ============================================================
+  const key = [
+    player,
+    s.attacker,
+    s.tablePairs.map(p => `${p.attack}:${p.defend || '-'}`).join(','),
+    s.myHand.slice().sort().join('.'),
+    s.oppKnownHand.slice().sort().join('.')
+  ].join('|');
 
-function applyEndgameMove(s, move, isMyTurn) {
-  const next = cloneState(s);
+  const cached = memo.get(key);
+  if (cached !== undefined) return cached;
 
-  const defending = needsDefense(next);
+  // Endgame states should be small, but cap recursion defensively.
+  if (depth >= 80) return evaluateState(s);
 
-  if (move === 'BITO') {
-    next.tablePairs = [];
-    return next;
-  }
-
-  if (move === 'TAKE') {
-    const tableCards = getTableCards(next);
-
-    if (isMyTurn) {
-      next.myHand.push(...tableCards);
-    } else {
-      next.oppKnownHand.push(...tableCards);
-    }
-
-    next.tablePairs = [];
-
-    return next;
-  }
-
-  const handKey = isMyTurn
-    ? 'myHand'
-    : 'oppKnownHand';
-
-  const hand = next[handKey];
-
-  const cardIndex = hand.indexOf(move);
-
-  if (cardIndex !== -1) {
-    hand.splice(cardIndex, 1);
-  }
+  const defending = needsDefense(s);
+  let moves;
 
   if (defending) {
-    const index = next.tablePairs.length - 1;
-
-    if (index >= 0) {
-      next.tablePairs[index].defend = move;
-    }
+    moves = getLegalMovesForPlayer(s, player);
   } else {
-    next.tablePairs.push({
-      attack: move,
-      defend: null
-    });
+    moves = getLegalMovesForPlayer(s, player);
   }
 
-  return next;
+  // If attacker has a completed table, BITO is always a legal resolution.
+  const canBito = !defending && s.tablePairs.length > 0;
+  const isMax = player === 'me';
+  let best = isMax ? -Infinity : Infinity;
+
+  // Defending player can also TAKE when no defense is selected. Model it as
+  // an explicit option, rather than pretending TAKE is a card move.
+  if (defending) {
+    const taken = simulateTake(s, player);
+    const score = solveEndgame(taken, taken.turn, depth + 1, alpha, beta, memo);
+    best = isMax ? Math.max(best, score) : Math.min(best, score);
+    if (isMax) alpha = Math.max(alpha, best);
+    else beta = Math.min(beta, best);
+  }
+
+  for (const card of moves) {
+    const next = simulatePlay(s, player, card);
+    const score = solveEndgame(next, next.turn, depth + 1, alpha, beta, memo);
+    best = isMax ? Math.max(best, score) : Math.min(best, score);
+    if (isMax) alpha = Math.max(alpha, best);
+    else beta = Math.min(beta, best);
+    if (beta <= alpha) break;
+  }
+
+  if (canBito && beta > alpha) {
+    const bito = simulateBito(s, player);
+    const score = solveEndgame(bito, bito.turn, depth + 1, alpha, beta, memo);
+    best = isMax ? Math.max(best, score) : Math.min(best, score);
+  }
+
+  if (best === Infinity || best === -Infinity) best = evaluateState(s);
+  memo.set(key, best);
+  return best;
 }
-
-
-// ============================================================
-// 26. ENDGAME MINIMAX
-// ============================================================
-// This is only used when opponent's entire hand is known.
-//
-// We use alpha-beta pruning and a dynamic depth limit.
-//
-// NOTE:
-// The surrounding application still controls actual Durak
-// turn transitions. This solver evaluates the tactical state
-// under the same simplified transition model used by your
-// previous engine.
-// ============================================================
-
-function solveEndgame(
-  simState,
-  isMyTurn,
-  depth = 0,
-  alpha = -Infinity,
-  beta = Infinity
-) {
-  const myCount = simState.myHand.length;
-  const oppCount = simState.oppKnownHand.length;
-
-  // ----------------------------------------------------------
-  // Terminal states
-  // ----------------------------------------------------------
-
-  if (myCount === 0 && oppCount === 0) {
-    return 0;
-  }
-
-  if (myCount === 0) {
-    return 100000 - depth;
-  }
-
-  if (oppCount === 0) {
-    return -100000 + depth;
-  }
-
-  // ----------------------------------------------------------
-  // Dynamic search limit.
-  //
-  // Small hands can be solved deeper.
-  // ----------------------------------------------------------
-
-  const totalCards =
-    myCount +
-    oppCount +
-    getTableCardCount(simState);
-
-  const maxDepth =
-    totalCards <= 6 ? 40 :
-    totalCards <= 8 ? 30 :
-    totalCards <= 10 ? 24 :
-    18;
-
-  if (depth >= maxDepth) {
-    return evaluateState(simState);
-  }
-
-  const moves = getEndgameMoves(simState, isMyTurn);
-
-  if (!moves.length) {
-    return evaluateState(simState);
-  }
-
-  let bestScore = isMyTurn
-    ? -Infinity
-    : Infinity;
-
-  for (const move of moves) {
-    const nextState =
-      applyEndgameMove(
-        simState,
-        move,
-        isMyTurn
-      );
-
-    // --------------------------------------------------------
-    // Turn model.
-    //
-    // We retain the same basic turn alternation model as the
-    // original solver, but after TAKE the player who took gets
-    // the next decision.
-    // --------------------------------------------------------
-
-    let nextTurn = !isMyTurn;
-
-    if (move === 'TAKE') {
-      nextTurn = isMyTurn;
-    }
-
-    const score = solveEndgame(
-      nextState,
-      nextTurn,
-      depth + 1,
-      alpha,
-      beta
-    );
-
-    if (isMyTurn) {
-      bestScore = Math.max(bestScore, score);
-      alpha = Math.max(alpha, bestScore);
-    } else {
-      bestScore = Math.min(bestScore, score);
-      beta = Math.min(beta, bestScore);
-    }
-
-    // Alpha-beta pruning.
-    if (beta <= alpha) {
-      break;
-    }
-  }
-
-  return bestScore;
-}
-
-
-// ============================================================
-// 27. FIND BEST ENDGAME MOVE
-// ============================================================
 
 function findBestEndgameMove(s = state) {
-  const moves = getEndgameMoves(s, true);
+  if (s.turn !== 'me') return null;
 
-  if (!moves.length) {
-    return null;
-  }
+  const defending = needsDefense(s);
+  const moves = getLegalMovesForPlayer(s, 'me');
+  const candidates = moves.map(card => ({ type: 'CARD', move: card }));
 
-  let bestMove = moves[0];
+  if (defending) candidates.push({ type: 'TAKE', move: 'TAKE' });
+  else if (s.tablePairs.length > 0) candidates.push({ type: 'BITO', move: 'BITO' });
+
+  if (!candidates.length) return null;
+
+  let best = candidates[0];
   let bestScore = -Infinity;
+  const memo = new Map();
 
-  for (const move of moves) {
-    const nextState =
-      applyEndgameMove(
-        s,
-        move,
-        true
-      );
+  for (const candidate of candidates) {
+    let next;
+    if (candidate.type === 'TAKE') next = simulateTake(s, 'me');
+    else if (candidate.type === 'BITO') next = simulateBito(s, 'me');
+    else next = simulatePlay(s, 'me', candidate.move);
 
-    let nextTurn = false;
-
-    if (move === 'TAKE') {
-      nextTurn = true;
-    }
-
-    const score = solveEndgame(
-      nextState,
-      nextTurn,
-      0,
-      -Infinity,
-      Infinity
-    );
-
+    const score = solveEndgame(next, next.turn, 1, -Infinity, Infinity, memo);
     if (score > bestScore) {
       bestScore = score;
-      bestMove = move;
+      best = candidate;
     }
   }
 
-  return {
-    move: bestMove,
-    score: bestScore
-  };
+  return { move: best.move, score: bestScore };
 }
 
-
 // ============================================================
-// 28. MAIN SUGGESTION FUNCTION
+// SUGGESTION UI
 // ============================================================
 
 function updateSuggestion() {
-  const sugEl = document.getElementById('suggestion-text');
-
-  if (!sugEl) {
-    return;
-  }
-
-  // ----------------------------------------------------------
-  // Phase checks
-  // ----------------------------------------------------------
+  const el = document.getElementById('suggestion-text');
+  if (!el) return;
 
   if (state.phase === 'drawing') {
-    sugEl.innerText = "Select drawn cards.";
+    el.innerText = `DRAW PHASE: Select ${state.cardsToDraw} card(s).`;
     return;
   }
 
-  if (state.turn === 'opp') {
-    sugEl.innerText = "Wait for opponent's move.";
+  if (state.phase === 'gameover') {
+    el.innerText = state.winner === 'me' ? 'Game over: you won.' : 'Game over: opponent won.';
     return;
   }
 
-  // ----------------------------------------------------------
-  // Basic state
-  // ----------------------------------------------------------
+  if (state.turn !== 'me') {
+    el.innerText = "Wait for opponent's move.";
+    return;
+  }
 
-  const lastPair = getLastPair(state);
-  const defending = needsDefense(state);
-
-  const tableCardsCount =
-    getTableCardCount(state);
-
-  const opponentCards =
-    getOpponentTotalCards(state);
-
-  const remainingDeck =
-    getRemainingDeck(state);
-
-  const exactEndgame =
-    isExactEndgame(state);
-
-  // ==========================================================
-  // ENDGAME
-  // ==========================================================
-
-  if (exactEndgame) {
-    const result =
-      findBestEndgameMove(state);
-
+  if (isExactEndgame(state)) {
+    const result = findBestEndgameMove(state);
     if (!result) {
-      sugEl.innerText =
-        "No legal move.";
+      el.innerText = 'No legal move.';
       return;
     }
-
-    const move = result.move;
-
-    if (move === 'TAKE') {
-      sugEl.innerText =
-        `ENDGAME: TAKE (forced/optimal)`;
+    if (result.move === 'TAKE') {
+      el.innerText = 'ENDGAME: TAKE.';
       return;
     }
-
-    if (move === 'BITO') {
-      sugEl.innerText =
-        `ENDGAME: Click BITO`;
+    if (result.move === 'BITO') {
+      el.innerText = 'ENDGAME: Click BITO.';
       return;
     }
-
-    sugEl.innerText =
-      `ENDGAME: Play ${move}`;
-
+    el.innerText = `ENDGAME: Play ${result.move}.`;
     return;
   }
 
-
-  // ==========================================================
-  // DEFENSE
-  // ==========================================================
-
-  if (defending) {
-    const defenses =
-      getLegalDefenses(state);
-
-    // --------------------------------------------------------
-    // No defense exists.
-    // --------------------------------------------------------
-
+  if (needsDefense(state)) {
+    const defenses = getLegalDefenses(state);
     if (!defenses.length) {
-      sugEl.innerText =
-        "No valid defense. You must Take.";
+      el.innerText = 'No valid defense. You must Take.';
       return;
     }
 
-    const decision =
-      evaluateBestDefenseVsTake(state);
-
-    // --------------------------------------------------------
-    // TAKE
-    // --------------------------------------------------------
-
+    const decision = evaluateBestDefenseVsTake(state);
     if (decision.action === 'TAKE') {
-      const pileCount =
-        getTableCardCount(state);
-
-      const pileRisk =
-        Math.round(getPileRisk(state));
-
-      if (pileCount >= 4) {
-        sugEl.innerText =
-          `TAKE. Dangerous pile (${pileCount} cards, risk ${pileRisk}).`;
-      } else if (opponentCards <= 2) {
-        sugEl.innerText =
-          `TAKE. Opponent has only ${opponentCards} cards, so wasting a strong defense is risky.`;
-      } else {
-        sugEl.innerText =
-          `TAKE. Better than spending a valuable defense card.`;
-      }
-
+      el.innerText = `TAKE. Pile: ${getTableCardCount(state)} cards, risk ${Math.round(getPileRisk(state))}.`;
       return;
     }
 
-    // --------------------------------------------------------
-    // DEFEND
-    // --------------------------------------------------------
-
-    const card =
-      decision.card;
-
-    if (!card) {
-      sugEl.innerText =
-        "No valid defense.";
-      return;
-    }
-
-    let reason = "";
-
-    if (isTrump(card)) {
-      reason = "low-cost trump defense";
-    } else if (
-      getCardValue(card) <= 8
-    ) {
-      reason = "cheap defense";
-    } else if (
-      getMyRankCounts(state)[getCardRank(card)] >= 2
-    ) {
-      reason = "preserves valuable structure";
-    } else {
-      reason = "best resulting position";
-    }
-
-    sugEl.innerText =
-      `Defend with ${card} (${reason}).`;
-
+    const card = decision.card;
+    let reason = isTrump(card, state)
+      ? 'cheapest available trump'
+      : isLowCard(card)
+        ? 'cheap defense'
+        : 'best resulting position';
+    el.innerText = `Defend with ${card} (${reason}).`;
     return;
   }
 
-
-  // ==========================================================
-  // ATTACK
-  // ==========================================================
-
-  const attacks =
-    getLegalAttacks(state);
-
-  // ----------------------------------------------------------
-  // No attack available.
-  // ----------------------------------------------------------
-
+  const attacks = getLegalAttacks(state);
   if (!attacks.length) {
-    sugEl.innerText =
-      "No valid attacks. Click Bito.";
+    el.innerText = state.tablePairs.length ? 'No valid attacks. Click BITO.' : 'No valid attack.';
     return;
   }
 
-  const result =
-    chooseBestAttack(state);
+  const result = chooseBestAttack(state);
+  const card = result.card;
+  const rank = getCardRank(card);
+  const counts = getMyRankCounts(state);
+  const answers = countKnownAnswers(card, state);
 
-  if (!result) {
-    sugEl.innerText =
-      "No valid attack.";
-    return;
-  }
+  let reason;
+  if (counts[rank] >= 3) reason = 'triple pressure';
+  else if (counts[rank] >= 2) reason = 'pair pressure';
+  else if (!isTrump(card, state) && getCardValue(card) <= 10) reason = 'dump low card';
+  else if (answers === 0) reason = 'no known answer';
+  else if (getOpponentTotalCards(state) <= 2) reason = 'pressure short hand';
+  else reason = 'best overall position';
 
-  const bestAttack =
-    result.card;
-
-  const rank =
-    getCardRank(bestAttack);
-
-  const rankCounts =
-    getMyRankCounts(state);
-
-  const opponentAnswers =
-    countKnownAnswers(bestAttack, state);
-
-  // ----------------------------------------------------------
-  // Explain why.
-  // ----------------------------------------------------------
-
-  let reason = "";
-
-  if (rankCounts[rank] >= 3) {
-    reason = "triple pressure";
-  } else if (rankCounts[rank] >= 2) {
-    reason = "pair pressure";
-  } else if (
-    !isTrump(bestAttack) &&
-    getCardValue(bestAttack) <= 8
-  ) {
-    reason = "dump low card";
-  } else if (opponentAnswers === 0) {
-    reason = "no known answer";
-  } else if (
-    opponentCards <= 2
-  ) {
-    reason = "pressure opponent's short hand";
-  } else if (
-    !isTrump(bestAttack) &&
-    getCardValue(bestAttack) >= 13
-  ) {
-    reason = "bait high non-trump";
-  } else {
-    reason = "best overall position";
-  }
-
-  // ----------------------------------------------------------
-  // Additional warning when attacking with trump.
-  // ----------------------------------------------------------
-
-  if (isTrump(bestAttack)) {
-    reason += ", but costs trump";
-  }
-
-  sugEl.innerText =
-    `Attack with ${bestAttack} (${reason}).`;
+  if (isTrump(card, state)) reason += ', costs trump';
+  el.innerText = `Attack with ${card} (${reason}).`;
 }
 
-
 // ============================================================
-// 29. OPTIONAL DEBUG FUNCTION
-// ============================================================
-// Run from the browser console:
-//   debugDurakEngine()
-//
-// Useful while tuning the engine.
+// DEBUG
 // ============================================================
 
 function debugDurakEngine() {
-  const attacks =
-    getLegalAttacks(state);
+  console.table(getLegalAttacks(state).map(card => ({
+    card,
+    value: getCardValue(card),
+    trump: isTrump(card, state),
+    strategicValue: Math.round(cardStrategicValue(card, state) * 100) / 100,
+    attackScore: Math.round(evaluateAttack(card, state) * 100) / 100,
+    knownAnswers: countKnownAnswers(card, state)
+  })));
 
-  const defenses =
-    getLegalDefenses(state);
+  console.table(getLegalDefenses(state).map(card => ({
+    card,
+    value: getCardValue(card),
+    trump: isTrump(card, state),
+    strategicValue: Math.round(cardStrategicValue(card, state) * 100) / 100,
+    defenseScore: Math.round(evaluateDefense(card, state) * 100) / 100
+  })));
 
-  console.table(
-    attacks.map(card => ({
-      card,
-      value: getCardValue(card),
-      trump: isTrump(card),
-      strategicValue:
-        Math.round(cardStrategicValue(card, state) * 100) / 100,
-      attackScore:
-        Math.round(evaluateAttack(card, state) * 100) / 100,
-      knownAnswers:
-        countKnownAnswers(card, state)
-    }))
-  );
-
-  console.table(
-    defenses.map(card => ({
-      card,
-      value: getCardValue(card),
-      trump: isTrump(card),
-      strategicValue:
-        Math.round(cardStrategicValue(card, state) * 100) / 100,
-      defenseScore:
-        Math.round(evaluateDefense(card, state) * 100) / 100
-    }))
-  );
-
-  console.log("My hand:", state.myHand);
-  console.log(
-    "Opponent known:",
-    state.oppKnownHand
-  );
-  console.log(
-    "Opponent unknown:",
-    state.oppUnknownCount
-  );
-  console.log(
-    "Opponent total:",
-    getOpponentTotalCards(state)
-  );
-  console.log(
-    "Remaining deck:",
-    getRemainingDeck(state)
-  );
-  console.log(
-    "My trumps:",
-    getMyTrumpCount(state)
-  );
-  console.log(
-    "Known opponent trumps:",
-    getKnownOpponentTrumpCount(state)
-  );
-  console.log(
-    "Estimated unknown trumps:",
-    getEstimatedUnknownTrumpCount(state)
-  );
-  console.log(
-    "Pile risk:",
-    getPileRisk(state)
-  );
-  console.log(
-    "State evaluation:",
-    evaluateState(state)
-  );
+  console.log('State:', JSON.parse(JSON.stringify(state)));
+  console.log('Remaining deck:', getRemainingDeck(state));
+  console.log('Exact endgame:', isExactEndgame(state));
+  console.log('Pile risk:', getPileRisk(state));
+  console.log('Evaluation:', evaluateState(state));
 }
