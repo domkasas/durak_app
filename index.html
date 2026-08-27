@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1220">
   <title>Durak Online Assistant</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-fixes.css">
 </head>
 
 <body>
@@ -14,209 +16,76 @@
        ========================================================= -->
 
   <div id="setup-panel" class="panel">
-
     <h2>Game Setup</h2>
 
-    <h3 id="setup-instruction">
-      1. Click your 6 starting cards
-    </h3>
+    <h3 id="setup-instruction">1. Click your 6 starting cards</h3>
 
     <div id="setup-palette" class="card-grid"></div>
 
     <div class="setup-controls">
-      <button id="btn-start-me"
-              onclick="startGame('me')"
-              disabled>
-        I Start
-      </button>
-
-      <button id="btn-start-opp"
-              onclick="startGame('opp')"
-              disabled>
-        Opponent Starts
-      </button>
+      <button id="btn-start-me" onclick="startGame('me')" disabled>I Start</button>
+      <button id="btn-start-opp" onclick="startGame('opp')" disabled>Opponent Starts</button>
     </div>
-
   </div>
-
 
   <!-- =========================================================
        GAME PHASE
        ========================================================= -->
 
   <div id="game-panel" class="panel" style="display: none;">
-
-    <!-- =======================================================
-         GAME TABLE
-         ======================================================= -->
-
     <div id="game-view">
-
-      <!-- Opponent -->
       <div id="opponent-zone">
-
-        <div id="opp-avatar">
-          Opponent (<span id="opp-count">6</span>)
-        </div>
-
-        <div id="opp-hand-unknown"
-             class="card-row">
-        </div>
-
+        <div id="opp-avatar">Opponent (<span id="opp-count">6</span>)</div>
+        <div id="opp-hand-unknown" class="card-row"></div>
       </div>
 
-
-      <!-- Center of table -->
       <div id="center-table">
-
-        <!-- Deck -->
         <div id="deck-container">
-
-          <div id="deck-count">
-            24
-          </div>
-
-          <div id="trump-card"
-               class="card trump-rotate">
-          </div>
-
+          <div id="deck-count">24</div>
+          <div id="trump-card" class="card trump-rotate"></div>
         </div>
-
-
-        <!-- Cards currently being played -->
         <div id="active-bouts"></div>
-
       </div>
 
-
-      <!-- Player hand -->
       <div id="player-zone">
-
-        <div id="my-hand"
-             class="card-row card-fan">
-        </div>
-
+        <div id="my-hand" class="card-row card-fan"></div>
       </div>
-
     </div>
-
-
-    <!-- =======================================================
-         CONTROL PANEL
-         ======================================================= -->
 
     <div id="control-panel">
-
-      <!-- Turn indicator -->
-      <h3 id="turn-indicator"
-          aria-live="polite">
-      </h3>
-
-
-      <!-- =====================================================
-           ACTION BUTTONS
-           ===================================================== -->
+      <h3 id="turn-indicator" aria-live="polite"></h3>
 
       <div class="control-row action-row">
-
-        <button class="action-btn undo-btn"
-                onclick="undo()">
-          Undo
-        </button>
-
-        <button class="action-btn bito-btn"
-                data-action="bito"
-                onclick="resolveBout('bito')">
-          Bito
-        </button>
-
-        <button class="action-btn take-btn"
-                id="btn-take"
-                onclick="resolveBout('take')">
-          Take
-        </button>
-
+        <button class="action-btn undo-btn" onclick="undo()">Undo</button>
+        <button class="action-btn bito-btn" data-action="bito" onclick="resolveBout('bito')">Bito</button>
+        <button class="action-btn take-btn" id="btn-take" onclick="resolveBout('take')">Take</button>
       </div>
 
-
-      <!-- =====================================================
-           OPPONENT QUICK ACCESS
-           ===================================================== -->
-
       <section class="control-section">
-
-        <h4 class="section-title">
-          Opponent's Hand
-        </h4>
-
-        <div id="quick-opp-hand"
-             class="card-row quick-hand">
-        </div>
-
+        <h4 class="section-title">Opponent's Hand</h4>
+        <div id="quick-opp-hand" class="card-row quick-hand"></div>
       </section>
-
-
-      <!-- =====================================================
-           CARD PALETTE
-           ===================================================== -->
 
       <section class="control-section palette-section">
-
-        <div id="play-palette"
-             class="card-grid">
-        </div>
-
+        <div id="play-palette" class="card-grid"></div>
       </section>
 
-
-      <!-- =====================================================
-           AI SUGGESTION
-           ===================================================== -->
-
-      <section id="ai-suggestion"
-               class="suggestion-box"
-               aria-live="polite">
-
-        <span class="suggestion-label">
-          Suggestion
-        </span>
-
+      <section id="ai-suggestion" class="suggestion-box" aria-live="polite">
+        <span class="suggestion-label">Suggestion</span>
         <span id="suggestion-text"></span>
-
       </section>
-
-
-      <!-- =====================================================
-           MY HAND QUICK ACCESS
-           ===================================================== -->
 
       <section class="control-section">
-
-        <h4 class="section-title">
-          Quick Access: My Hand
-        </h4>
-
-        <div id="quick-my-hand"
-             class="card-row quick-hand">
-        </div>
-
+        <h4 class="section-title">Quick Access: My Hand</h4>
+        <div id="quick-my-hand" class="card-row quick-hand"></div>
       </section>
-
     </div>
-
   </div>
 
-
-  <!-- =========================================================
-       SCRIPTS
-       ========================================================= -->
-
-  <!-- Keep this order. rules.js must load before engine.js,
-       and engine.js must load before app.js. -->
-
+  <!-- rules.js -> engine.js -> app.js -> fixes.js -->
   <script src="js/rules.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/app.js"></script>
-
+  <script src="js/fixes.js"></script>
 </body>
 </html>
