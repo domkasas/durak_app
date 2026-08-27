@@ -1,0 +1,141 @@
+/* WIP polish and responsive hardening. Loaded after style.css. */
+
+button {
+  font: inherit;
+  touch-action: manipulation;
+}
+
+.card,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.card:active {
+  transform: translateY(-2px) scale(0.99);
+}
+
+.card-grid {
+  max-width: 100%;
+}
+
+#setup-panel {
+  max-height: 100vh;
+  overflow: auto;
+}
+
+#setup-palette {
+  min-width: 0;
+}
+
+#control-panel {
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.quick-hand {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
+}
+
+#active-bouts {
+  max-width: 100%;
+}
+
+/* Avoid the desktop card dimensions making the table unusable on phones. */
+@media (max-width: 900px) {
+  :root {
+    --card-width: 68px;
+    --card-height: 100px;
+    --card-font-size: 21px;
+    --card-sm-width: 40px;
+    --card-sm-height: 59px;
+    --card-sm-font: 14px;
+  }
+
+  body {
+    overflow: auto;
+  }
+
+  #game-panel {
+    min-height: 100vh;
+    flex-direction: column;
+  }
+
+  #game-view {
+    flex: none;
+    min-height: 58vh;
+    width: 100%;
+    padding: 12px;
+    border-right: 0;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  #control-panel {
+    width: 100%;
+    max-height: none;
+    padding: 12px;
+  }
+
+  #my-hand {
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 12px 6px 18px;
+  }
+
+  #opp-hand-unknown {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  #center-table {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .action-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    padding: 8px 0;
+    background: rgba(23, 32, 51, 0.96);
+    backdrop-filter: blur(8px);
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --card-width: 56px;
+    --card-height: 82px;
+    --card-font-size: 18px;
+    --card-sm-width: 34px;
+    --card-sm-height: 50px;
+    --card-sm-font: 12px;
+  }
+
+  #game-view {
+    min-height: 52vh;
+    padding: 8px;
+  }
+
+  .action-row {
+    gap: 6px;
+  }
+
+  .action-row button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
