@@ -1,0 +1,1340 @@
+/* ============================================================
+   DURAK HELPER APP
+   Polished dark table UI
+   ============================================================ */
+
+:root {
+  /* Cards */
+  --card-width: 85px;
+  --card-height: 125px;
+  --card-font-size: 26px;
+
+  --card-sm-width: 48px;
+  --card-sm-height: 70px;
+  --card-sm-font: 16px;
+
+  /* Layout */
+  --transition-speed: 0.15s;
+
+  /* UI colors */
+  --bg-main: #0b1220;
+  --bg-panel: #172033;
+  --bg-panel-light: #1e293b;
+  --bg-control: #273449;
+
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  --border: #334155;
+
+  --blue: #2563eb;
+  --blue-light: #38bdf8;
+
+  --green: #16a34a;
+  --red: #dc2626;
+
+  --gold: #fbbf24;
+  --gold-light: #fde68a;
+}
+
+
+/* ============================================================
+   RESET
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  display: flex;
+  height: 100vh;
+
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+
+  background: var(--bg-main);
+  color: var(--text-main);
+
+  overflow: hidden;
+}
+
+
+/* ============================================================
+   ACCESSIBILITY
+   ============================================================ */
+
+button:focus-visible,
+.card:focus-visible {
+  outline: 2px solid var(--blue-light);
+  outline-offset: 3px;
+}
+
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+
+/* ============================================================
+   GAME VIEW
+   ============================================================ */
+
+#game-view {
+  flex: 7;
+
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
+
+  padding: 24px;
+
+  /*
+    Dark green/blue felt.
+    Cards stand out much better than against pure blue.
+  */
+  background:
+    radial-gradient(
+      circle at center,
+      #164e45 0%,
+      #123d39 42%,
+      #0f2928 100%
+    );
+
+  border-right: 1px solid #1e293b;
+
+  box-shadow:
+    inset -12px 0 25px rgba(0, 0, 0, 0.25),
+    inset 0 0 80px rgba(0, 0, 0, 0.12);
+
+  overflow: hidden;
+}
+
+
+/*
+  Very subtle felt texture.
+  Keeps the table from looking completely flat.
+*/
+#game-view::before {
+  content: "";
+
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+
+  opacity: 0.025;
+
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.5) 0px,
+      rgba(255,255,255,0.5) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+
+  mix-blend-mode: overlay;
+}
+
+
+/* ============================================================
+   CARDS
+   ============================================================ */
+
+.card {
+  width: var(--card-width);
+  height: var(--card-height);
+
+  position: relative;
+
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+
+  gap: 2px;
+
+  padding: 8px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #ffffff 0%,
+      #f8fafc 55%,
+      #eef2f7 100%
+    );
+
+  border: 1px solid #dbe2ea;
+  border-radius: 9px;
+
+  color: #0f172a;
+
+  font-size: var(--card-font-size);
+  font-weight: 800;
+
+  letter-spacing: -1px;
+
+  cursor: pointer;
+
+  box-shadow:
+    0 5px 8px rgba(0, 0, 0, 0.28),
+    0 2px 3px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  transition:
+    transform var(--transition-speed) ease,
+    box-shadow var(--transition-speed) ease,
+    border-color var(--transition-speed) ease;
+}
+
+
+/* Subtle card highlight */
+.card::after {
+  content: "";
+
+  position: absolute;
+  inset: 1px;
+
+  border-radius: 8px;
+
+  pointer-events: none;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255,255,255,0.35);
+}
+
+
+/* Hover */
+.card:hover {
+  transform: translateY(-5px);
+
+  box-shadow:
+    0 12px 20px rgba(0, 0, 0, 0.38),
+    0 4px 7px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+
+/* ============================================================
+   SUITS
+   ============================================================ */
+
+.card.hearts,
+.card.diamonds {
+  color: #dc2626;
+}
+
+.card.spades,
+.card.clubs {
+  color: #172033;
+}
+
+
+/* Card rank */
+.c-rank {
+  font-size: 1.1em;
+  font-weight: 900;
+  letter-spacing: -1px;
+}
+
+
+/* Suit symbol */
+.c-suit {
+  font-size: 1.5em;
+  line-height: 1;
+
+  text-shadow:
+    0 1px 1px rgba(0,0,0,0.08);
+}
+
+
+/* ============================================================
+   CARD BACK
+   ============================================================ */
+
+.card.card-back {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #1e3a8a,
+      #1e3a8a 8px,
+      #2563eb 8px,
+      #2563eb 16px
+    );
+
+  border: 2px solid rgba(255,255,255,0.9);
+
+  box-shadow:
+    inset 0 0 0 2px #1e40af,
+    0 5px 9px rgba(0,0,0,0.4);
+}
+
+
+/* ============================================================
+   RECOMMENDED CARD
+   ============================================================ */
+
+.card.recommended {
+  z-index: 20;
+
+  transform: translateY(-13px);
+
+  border: 3px solid var(--gold);
+
+  box-shadow:
+    0 0 0 2px rgba(251,191,36,0.15),
+    0 0 18px rgba(251,191,36,0.55),
+    0 10px 20px rgba(0,0,0,0.35);
+
+  background:
+    linear-gradient(
+      135deg,
+      #fffdf3 0%,
+      #ffffff 65%,
+      #fff8dc 100%
+    );
+}
+
+
+/*
+  Keep recommended card lifted when hovered.
+*/
+.card.recommended:hover {
+  transform: translateY(-17px);
+
+  box-shadow:
+    0 0 0 2px rgba(251,191,36,0.2),
+    0 0 25px rgba(251,191,36,0.7),
+    0 14px 25px rgba(0,0,0,0.4);
+}
+
+
+/* ============================================================
+   TRUMP
+   ============================================================ */
+
+.card.trump-glow {
+  border-color: var(--gold);
+
+  box-shadow:
+    0 0 12px rgba(251,191,36,0.45),
+    0 5px 9px rgba(0,0,0,0.3),
+    inset 0 1px 0 rgba(255,255,255,0.9);
+
+  background:
+    linear-gradient(
+      135deg,
+      #fffbeb 0%,
+      #ffffff 60%,
+      #fff7d6 100%
+    );
+}
+
+.card.trump-glow .c-suit {
+  text-shadow:
+    0 0 7px rgba(251,191,36,0.6);
+}
+
+
+/* Recommended + trump */
+.card.recommended.trump-glow {
+  border-color: var(--gold);
+
+  box-shadow:
+    0 0 0 2px rgba(251,191,36,0.18),
+    0 0 24px rgba(251,191,36,0.7),
+    0 12px 22px rgba(0,0,0,0.4);
+}
+
+
+/* ============================================================
+   USED CARD
+   ============================================================ */
+
+.card.used {
+  opacity: 0.15;
+
+  pointer-events: none;
+
+  background: transparent;
+
+  border: 1px dashed #475569;
+
+  box-shadow: none;
+
+  color: #64748b;
+}
+
+
+/* ============================================================
+   OPPONENT
+   ============================================================ */
+
+#opponent-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  width: 100%;
+  min-height: 120px;
+
+  position: relative;
+  z-index: 2;
+}
+
+
+#opp-avatar {
+  padding: 6px 16px;
+  margin-bottom: 8px;
+
+  background: rgba(15,23,42,0.55);
+
+  border: 1px solid rgba(148,163,184,0.25);
+
+  border-radius: 20px;
+
+  font-size: 14px;
+  font-weight: 600;
+
+  backdrop-filter: blur(6px);
+
+  box-shadow:
+    0 3px 8px rgba(0,0,0,0.15);
+}
+
+
+/*
+  Opponent cards overlap properly.
+*/
+#opp-hand-unknown {
+  display: flex;
+
+  margin-top: 5px;
+}
+
+#opp-hand-unknown .card {
+  margin-left: -22px;
+}
+
+#opp-hand-unknown .card:first-child {
+  margin-left: 0;
+}
+
+
+/* ============================================================
+   CENTER TABLE
+   ============================================================ */
+
+#center-table {
+  width: 100%;
+  flex: 1;
+
+  position: relative;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  z-index: 1;
+}
+
+
+/* ============================================================
+   DECK
+   ============================================================ */
+
+#deck-container {
+  position: absolute;
+
+  left: 20px;
+
+  width: 100px;
+  height: 100px;
+}
+
+
+#deck-count {
+  position: absolute;
+
+  top: -28px;
+  left: 0;
+
+  font-size: 22px;
+  font-weight: 800;
+
+  text-shadow:
+    0 2px 5px rgba(0,0,0,0.55);
+}
+
+
+.trump-rotate {
+  position: absolute;
+
+  top: 0;
+  left: 0;
+
+  transform:
+    rotate(-90deg);
+
+  transform-origin: center;
+
+  z-index: 1;
+
+  box-shadow:
+    -4px 5px 8px rgba(0,0,0,0.35);
+}
+
+
+#deck-back {
+  position: absolute;
+
+  top: 0;
+  left: 24px;
+
+  z-index: 2;
+}
+
+
+/* ============================================================
+   TABLE / BOUTS
+   ============================================================ */
+
+#active-bouts {
+  display: flex;
+
+  gap: 24px;
+
+  flex-wrap: wrap;
+
+  justify-content: center;
+
+  max-width: 80%;
+}
+
+
+.bout-pair {
+  position: relative;
+
+  width: var(--card-width);
+  height: var(--card-height);
+}
+
+
+.bout-defend {
+  position: absolute;
+
+  top: 18px;
+  left: 18px;
+
+  z-index: 2;
+
+  box-shadow:
+    -2px 6px 10px rgba(0,0,0,0.4);
+}
+
+
+/* ============================================================
+   DISCARD
+   ============================================================ */
+
+#discard-zone {
+  position: absolute;
+
+  right: 20px;
+  top: 50%;
+
+  transform: translateY(-50%);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  font-size: 13px;
+  font-weight: bold;
+
+  opacity: 0.8;
+
+  z-index: 2;
+}
+
+
+.card.small {
+  width: var(--card-sm-width);
+  height: var(--card-sm-height);
+
+  font-size: var(--card-sm-font);
+}
+
+
+/* ============================================================
+   PLAYER HAND
+   ============================================================ */
+
+#player-zone {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+
+  min-height: 120px;
+
+  position: relative;
+
+  z-index: 3;
+}
+
+
+.card-fan {
+  display: flex;
+
+  justify-content: center;
+
+  max-width: 95%;
+}
+
+
+.card-fan .card {
+  margin-left: -25px;
+}
+
+
+.card-fan .card:first-child {
+  margin-left: 0;
+}
+
+
+.card-fan .card:hover {
+  transform: translateY(-20px);
+
+  z-index: 10;
+}
+
+
+/*
+  Recommended card needs to stay above neighboring cards.
+*/
+.card-fan .card.recommended {
+  z-index: 20;
+}
+
+
+/* ============================================================
+   PANELS
+   ============================================================ */
+
+.panel {
+  width: 100%;
+  height: 100vh;
+
+  display: flex;
+}
+
+
+#setup-panel {
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  background: var(--bg-main);
+}
+
+
+/* ============================================================
+   CONTROL PANEL
+   ============================================================ */
+
+#control-panel {
+  flex: 3;
+
+  background:
+    linear-gradient(
+      180deg,
+      #1e293b 0%,
+      #172033 100%
+    );
+
+  padding: 24px;
+
+  overflow-y: auto;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 20px;
+
+  border-left: 1px solid rgba(255,255,255,0.03);
+}
+
+
+/* ============================================================
+   CONTROL ROW
+   ============================================================ */
+
+.control-row {
+  display: flex;
+
+  gap: 12px;
+}
+
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+
+select,
+button {
+  padding: 12px 16px;
+
+  background: #334155;
+
+  color: var(--text-main);
+
+  border: 1px solid rgba(255,255,255,0.04);
+
+  border-radius: 8px;
+
+  cursor: pointer;
+
+  font-family: inherit;
+
+  font-weight: 600;
+
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.2);
+
+  transition:
+    transform var(--transition-speed) ease,
+    filter var(--transition-speed) ease,
+    box-shadow var(--transition-speed) ease,
+    background var(--transition-speed) ease;
+}
+
+
+button:hover:not(:disabled) {
+  transform: translateY(-2px);
+
+  filter: brightness(1.12);
+
+  box-shadow:
+    0 5px 9px rgba(0,0,0,0.3);
+}
+
+
+button:active:not(:disabled) {
+  transform: translateY(0);
+
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.2);
+}
+
+
+button:disabled {
+  opacity: 0.4;
+
+  cursor: not-allowed;
+}
+
+
+/* ============================================================
+   ACTION BUTTONS
+   ============================================================ */
+
+.action-btn {
+  flex: 1 1 0;
+
+  text-transform: uppercase;
+
+  font-size: 14px;
+
+  letter-spacing: 0.5px;
+
+  white-space: nowrap;
+
+  overflow: hidden;
+}
+
+
+.bito-btn {
+  background: #2563eb;
+}
+
+
+.take-btn {
+  background: #dc2626;
+}
+
+
+/*
+  Slightly stronger hover for important actions.
+*/
+.bito-btn:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+
+.take-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+
+/* ============================================================
+   SUGGESTION BOX
+   ============================================================ */
+
+.suggestion-box {
+  background:
+    linear-gradient(
+      135deg,
+      #0f172a,
+      #111c2e
+    );
+
+  border-left: 4px solid var(--blue-light);
+
+  padding: 16px;
+
+  border-radius: 7px;
+
+  box-shadow:
+    0 5px 12px rgba(0,0,0,0.18);
+
+  font-size: 15px;
+
+  line-height: 1.45;
+}
+
+
+/*
+  If your JS later adds these classes to the suggestion box,
+  they are already styled.
+*/
+
+.suggestion-box.good {
+  border-left-color: var(--green);
+}
+
+.suggestion-box.warning {
+  border-left-color: var(--gold);
+}
+
+.suggestion-box.danger {
+  border-left-color: var(--red);
+}
+
+
+/* ============================================================
+   SUBTEXT
+   ============================================================ */
+
+.subtext {
+  font-size: 13px;
+
+  color: var(--text-muted);
+
+  line-height: 1.4;
+}
+
+
+/* ============================================================
+   CARD GRID
+   ============================================================ */
+
+.card-grid {
+  display: grid;
+
+  /*
+    Rank label + four suits
+  */
+  grid-template-columns:
+    24px repeat(4, 1fr);
+
+  gap: 10px;
+
+  align-items: center;
+  justify-content: center;
+
+  max-width: fit-content;
+
+  margin: 0 auto;
+}
+
+
+/* ============================================================
+   GRID HEADERS
+   ============================================================ */
+
+.grid-header {
+  display: flex;
+
+  justify-content: center;
+  align-items: center;
+
+  font-weight: bold;
+
+  color: var(--text-muted);
+}
+
+
+.rank-header {
+  font-size: 16px;
+
+  text-align: right;
+
+  padding-right: 4px;
+}
+
+
+.suit-header {
+  font-size: 24px;
+}
+
+
+.suit-header.hearts,
+.suit-header.diamonds {
+  color: #dc2626;
+}
+
+
+.suit-header.spades,
+.suit-header.clubs {
+  color: #f8fafc;
+}
+
+
+/* ============================================================
+   SMALL CARDS
+   ============================================================ */
+
+.card-grid .card,
+#quick-my-hand .card {
+  width: var(--card-sm-width);
+  height: var(--card-sm-height);
+
+  font-size: var(--card-sm-font);
+
+  padding: 4px;
+
+  border-radius: 6px;
+}
+
+
+/* ============================================================
+   SMALL CARD BACK
+   ============================================================ */
+
+.card-back-sm {
+  width: var(--card-sm-width);
+  height: var(--card-sm-height);
+
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #1e3a8a,
+      #1e3a8a 5px,
+      #2563eb 5px,
+      #2563eb 10px
+    );
+
+  border: 1px solid #93c5fd;
+
+  border-radius: 6px;
+
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.2);
+}
+
+
+/* ============================================================
+   CARD ROW
+   ============================================================ */
+
+.card-row {
+  display: flex;
+
+  gap: 8px;
+
+  justify-content: center;
+
+  flex-wrap: wrap;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 850px) {
+
+  body {
+    overflow: auto;
+  }
+
+  .panel {
+    height: auto;
+
+    min-height: 100vh;
+  }
+
+  #game-panel {
+    flex-direction: column;
+  }
+
+  #game-view {
+    min-height: 62vh;
+
+    border-right: 0;
+    border-bottom: 1px solid #1e293b;
+
+    padding: 16px;
+  }
+
+  #control-panel {
+    min-height: 38vh;
+
+    padding: 16px;
+
+    gap: 14px;
+  }
+
+  #deck-container {
+    left: 8px;
+
+    transform: scale(0.85);
+
+    transform-origin: left center;
+  }
+
+  #discard-zone {
+    right: 8px;
+  }
+
+  #active-bouts {
+    gap: 12px;
+
+    max-width: 90%;
+  }
+
+  .control-row {
+    flex-wrap: wrap;
+  }
+
+  .action-btn {
+    min-width: calc(50% - 6px);
+  }
+
+  .card-grid {
+    gap: 8px;
+  }
+
+  .card-fan .card {
+    margin-left: -30px;
+  }
+
+  .card-fan .card:first-child {
+    margin-left: 0;
+  }
+}
+
+
+/* ============================================================
+   SMALL PHONE
+   ============================================================ */
+
+@media (max-width: 520px) {
+
+  #game-view {
+    min-height: 58vh;
+
+    padding: 10px;
+  }
+
+  #control-panel {
+    min-height: 42vh;
+
+    padding: 12px;
+  }
+
+  .card {
+    width: 72px;
+    height: 106px;
+
+    font-size: 22px;
+  }
+
+  .card-fan .card {
+    margin-left: -34px;
+  }
+
+  .bout-pair {
+    width: 72px;
+    height: 106px;
+  }
+
+  .bout-defend {
+    top: 14px;
+    left: 14px;
+  }
+
+  #active-bouts {
+    gap: 8px;
+  }
+
+  #deck-container {
+    transform: scale(0.7);
+  }
+
+  .action-btn {
+    min-width: 100%;
+
+    font-size: 13px;
+  }
+
+  .suggestion-box {
+    padding: 12px;
+
+    font-size: 14px;
+  }
+}
+
+/* ============================================================
+   SETUP
+   ============================================================ */
+
+#setup-panel {
+  gap: 18px;
+  padding: 30px;
+  overflow-y: auto;
+}
+
+#setup-panel h2 {
+  font-size: 28px;
+  letter-spacing: -0.5px;
+}
+
+#setup-instruction {
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+
+/* Setup buttons */
+
+.setup-controls {
+  display: flex;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.setup-controls button {
+  min-width: 130px;
+}
+
+
+/* ============================================================
+   TURN INDICATOR
+   ============================================================ */
+
+#turn-indicator {
+  min-height: 24px;
+
+  margin-bottom: 2px;
+
+  color: var(--gold-light);
+
+  font-size: 17px;
+  font-weight: 700;
+
+  letter-spacing: 0.1px;
+}
+
+
+/* ============================================================
+   CONTROL SECTIONS
+   ============================================================ */
+
+.control-section {
+  width: 100%;
+}
+
+.section-title {
+  margin-bottom: 10px;
+
+  color: #cbd5e1;
+
+  font-size: 14px;
+  font-weight: 700;
+
+  letter-spacing: 0.2px;
+}
+
+
+/* ============================================================
+   ACTION BUTTONS
+   ============================================================ */
+
+.action-row {
+  margin-bottom: 2px;
+}
+
+.undo-btn {
+  background: #475569;
+}
+
+
+/* ============================================================
+   QUICK ACCESS HANDS
+   ============================================================ */
+
+.quick-hand {
+  justify-content: flex-start;
+
+  min-height: 70px;
+
+  padding: 4px 0;
+}
+
+.quick-hand .card {
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   PALETTE
+   ============================================================ */
+
+.palette-section {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+
+/* ============================================================
+   AI SUGGESTION
+   ============================================================ */
+
+.suggestion-box {
+  display: flex;
+  flex-direction: column;
+
+  gap: 5px;
+
+  margin-top: 2px;
+
+  min-height: 66px;
+}
+
+.suggestion-label {
+  color: var(--text-muted);
+
+  font-size: 11px;
+  font-weight: 800;
+
+  text-transform: uppercase;
+
+  letter-spacing: 1px;
+}
+
+#suggestion-text {
+  color: var(--text-main);
+
+  font-size: 15px;
+  font-weight: 700;
+
+  line-height: 1.4;
+}
+
+
+/* ============================================================
+   SUGGESTION STATES
+   ============================================================ */
+
+.suggestion-box.good {
+  border-left-color: var(--green);
+}
+
+.suggestion-box.warning {
+  border-left-color: var(--gold);
+}
+
+.suggestion-box.danger {
+  border-left-color: var(--red);
+}
+
+
+/* ============================================================
+   DESKTOP CONTROL PANEL TWEAKS
+   ============================================================ */
+
+@media (min-width: 851px) {
+
+  #control-panel {
+    min-width: 330px;
+    max-width: 460px;
+  }
+
+}
+
+
+/* ============================================================
+   MOBILE SETUP
+   ============================================================ */
+
+@media (max-width: 520px) {
+
+  #setup-panel {
+    padding: 18px 12px;
+  }
+
+  #setup-panel h2 {
+    font-size: 24px;
+  }
+
+  .setup-controls {
+    width: 100%;
+
+    flex-direction: column;
+  }
+
+  .setup-controls button {
+    width: 100%;
+  }
+
+}
