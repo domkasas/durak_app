@@ -7,7 +7,7 @@
 (function () {
   'use strict';
 
-  const ORIGINAL_DECK_SIZE = 24;
+  const DECK_SIZE = 24;
   const HAND_LIMIT = 6;
 
   function cardIdIsValid(cardId) {
@@ -24,20 +24,13 @@
     ]);
   }
 
-  // The stock is what is genuinely still in the draw pile. The trump card is
-  // already removed from the stock while it is face-up, so it must not be
-  // counted as an extra card after it is picked up either.
   window.getAvailableStock = function getAvailableStockFixed() {
     const used = getKnownCardsSet();
-    return Math.max(0, ORIGINAL_DECK_SIZE - used.size - state.oppUnknownCount);
+    return Math.max(0, DECK_SIZE - used.size - state.oppUnknownCount);
   };
 
-  // A card may only be attacked if its rank is already represented on the
-  // table after the first attack. The attack cap is the defender's original
-  // hand size, not simply their current hand size.
   window.canAttack = function canAttackFixed(cardId) {
-    if (!cardIdIsValid(cardId)) return false;
-    if (state.phase !== 'playing') return false;
+    if (!cardIdIsValid(cardId) || state.phase !== 'playing') return false;
 
     const tableCards = getTableCards();
     const tableRanks = new Set(tableCards.map(getCardRank));
@@ -54,22 +47,37 @@
 
     const hasUnansweredAttack = state.tablePairs.some(pair => !pair.defend);
 
-    if (action === 'take') {
-      // Only the current defender may take.
-      return hasUnansweredAttack;
-    }
-
-    if (action === 'bito') {
-      // Bito is only legal after every attack has been defended.
-      return !hasUnansweredAttack;
-    }
-
+    if (action === 'take') return hasUnansweredAttack;
+    if (action === 'bito') return !hasUnansweredAttack;
     return false;
   };
 
-  // Reveal the opponent's unknown cards only when every non-hand card is
-  // accounted for. This avoids turning a temporarily exhausted stock into
-  // a false deduction while a draw phase is still being resolved.
+  // The 24-card game has 6 cards per suit, not the 8 trumps used by the
+  // engine's original 36-card assumption. Keep AI evaluation consistent with
+  // the actual deck represented by app.js.
+  window.getEstimatedUnknownTrumpCount = function getEstimatedUnknownTrumpCountFixed(s = state) {
+    if (!s.trumpCard) return 0;
+
+    const trumpSuit = getCardSuit(s.trumpCard);
+    const totalTrumps = s.allCards.filter(card => card.suit === trumpSuit).length;
+    const knownTrumps = [
+      ...s.myHand,
+      ...s.oppKnownHand,
+      ...getTableCards(s),
+      ...s.discard
+    ].filter(card => getCardSuit(card) === trumpSuit).length;
+
+    return Math.max(0, totalTrumps - knownTrumps);
+  };
+
+  window.getTrumpScarcityMultiplier = function getTrumpScarcityMultiplierFixed(s = state) {
+    const remaining = getEstimatedUnknownTrumpCount(s);
+    if (remaining <= 1) return 1.35;
+    if (remaining <= 2) return 1.20;
+    if (remaining <= 3) return 1.10;
+    return 1.0;
+  };
+
   window.deduceOpponentHand = function deduceOpponentHandFixed() {
     if (state.oppUnknownCount <= 0) return;
 
@@ -78,9 +86,7 @@
       .map(card => card.id)
       .filter(id => !used.has(id));
 
-    // Every unknown opponent card must be among the remaining unassigned
-    // cards once the stock is empty.
-    const stock = Math.max(0, ORIGINAL_DECK_SIZE - used.size - state.oppUnknownCount);
+    const stock = Math.max(0, DECK_SIZE - used.size - state.oppUnknownCount);
     if (stock !== 0) return;
 
     const revealCount = Math.min(state.oppUnknownCount, unknownCards.length);
@@ -88,8 +94,6 @@
     state.oppUnknownCount -= revealCount;
   };
 
-  // Keep state internally consistent after undo or a hand update. These are
-  // assertions rather than silent repairs, so bad state is visible during WIP.
   window.validateGameState = function validateGameState() {
     const zones = [
       ...state.myHand,
@@ -117,8 +121,6 @@
     return true;
   };
 
-  // Wrap the existing UI updater so every rendered state gets a cheap
-  // consistency check without changing the current rendering code.
   const originalUpdatePlayingUI = window.updatePlayingUI;
   if (typeof originalUpdatePlayingUI === 'function') {
     window.updatePlayingUI = function updatePlayingUIFixed() {
