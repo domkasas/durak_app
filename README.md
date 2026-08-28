@@ -1,10 +1,9 @@
-<img width="1485" height="1577" alt="image" src="https://github.com/user-attachments/assets/93284e79-bb6f-4353-b9c7-e3651a466b45" />
-
 # Durak Online Assistant
 
 A web-based helper tool and live Monte Carlo equity calculator for 24-card Durak.
 
-![Durak Assistant Screenshot](screenshot.png)
+![Durak Assistant Screenshot]
+<img width="1485" height="1577" alt="image" src="https://github.com/user-attachments/assets/93284e79-bb6f-4353-b9c7-e3651a466b45" />
 
 ## Live Demo
 [Launch App](https://<username>.github.io/<repo-name>/)
